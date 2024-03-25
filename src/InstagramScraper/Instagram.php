@@ -55,7 +55,7 @@ class Instagram
     protected $sessionPassword;
     protected $userSession;
     protected $rhxGis = null;
-    protected $userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/84.0.4147.89 Safari/537.36';
+    protected $userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/62.0.3202.94 Safari/537.36';
     protected $customCookies = null;
 
     /**
@@ -416,11 +416,14 @@ class Instagram
         }
 
         if ($this->getUserAgent()) {
-            $headers['user-agent'] = $this->getUserAgent();
+            $headers['User-Agent'] = $this->getUserAgent();
 
             if (!is_null($gisToken)) {
                 $headers['x-instagram-gis'] = $gisToken;
             }
+        }
+        if (!isset($headers['x-ig-app-id'])) {
+            $headers['x-ig-app-id'] = self::X_IG_APP_ID;
         }
 
         if (empty($headers['x-csrftoken'])) {
@@ -759,12 +762,12 @@ class Instagram
 
         $userArray = $this->decodeRawBodyToJson($response->raw_body);
 
-        if (!isset($userArray['graphql']['user'])) {
+        if (!isset($userArray['data']['user'])) {
             throw new InstagramException('Response code is ' . $response->code . ': ' . static::httpCodeToString($response->code) . '.' .
                                          'Something went wrong. Please report issue.', $response->code, static::getErrorBody($response->body));
         }
 
-        return Account::create($userArray['graphql']['user']);
+        return Account::create($userArray['data']['user']);
     }
 
     private static function extractSharedDataFromBody($body)
