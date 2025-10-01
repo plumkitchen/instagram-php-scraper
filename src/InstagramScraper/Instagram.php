@@ -55,7 +55,7 @@ class Instagram
     protected $sessionPassword;
     protected $userSession;
     protected $rhxGis = null;
-    protected $userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/84.0.4147.89 Safari/537.36';
+    protected $userAgent = 'Instagram 219.0.0.12.117 Android';
     protected $customCookies = null;
 
     /**
@@ -416,7 +416,7 @@ class Instagram
         }
 
         if ($this->getUserAgent()) {
-            $headers['user-agent'] = $this->getUserAgent();
+            $headers['User-Agent'] = $this->getUserAgent();
 
             if (!is_null($gisToken)) {
                 $headers['x-instagram-gis'] = $gisToken;
@@ -692,9 +692,7 @@ class Instagram
      */
     public function getMedias($username, $count = 20, $maxId = '')
     {
-
-        $account = $this->getAccountInfo($username);
-        return $this->getMediasByUserId($account->getId(), $count, $maxId);
+        return $this->getMediasByUsername($username, $count, $maxId);
     }
 
     /**
@@ -759,12 +757,12 @@ class Instagram
 
         $userArray = $this->decodeRawBodyToJson($response->raw_body);
 
-        if (!isset($userArray['graphql']['user'])) {
+        if (!isset($userArray['data']['user'])) {
             throw new InstagramException('Response code is ' . $response->code . ': ' . static::httpCodeToString($response->code) . '.' .
                                          'Something went wrong. Please report issue.', $response->code, static::getErrorBody($response->body));
         }
 
-        return Account::create($userArray['graphql']['user']);
+        return Account::create($userArray['data']['user']);
     }
 
     private static function extractSharedDataFromBody($body)
@@ -782,6 +780,60 @@ class Instagram
         }
 
         return false;
+    }
+
+    public function getMediasByUsername($username, $count = 12, $maxId = '')
+    {
+        $index = 0;
+        $medias = [];
+        $isMoreAvailable = true;
+        while ($index < $count && $isMoreAvailable) {
+            $variables = [
+                'username' => (string)$username,
+                'first' => (string)$count,
+                'after' => (string)$maxId,
+                'data' => [
+                    'count' => (string)$count,
+                ],
+                '__relay_internal__pv__PolarisIsLoggedInrelayprovider' => false
+            ];
+
+            $response = Request::post(Endpoints::getAccountMediasJsonLink(), $this->generateHeaders($this->userSession, $this->generateGisToken($variables)), [
+                'doc_id' => '10011781445520656',
+                'variables' => json_encode($variables),
+            ]);
+
+            if (static::HTTP_NOT_FOUND === $response->code) {
+                throw new InstagramNotFoundException('Account with given id does not exist.');
+            }
+            if (static::HTTP_OK !== $response->code) {
+                throw new InstagramException('Response code is ' . $response->code . ': ' . static::httpCodeToString($response->code) . '.' .
+                    'Something went wrong. Please report issue.', $response->code, static::getErrorBody($response->body));
+            }
+
+            $arr = $this->decodeRawBodyToJson($response->raw_body);
+
+            if (!is_array($arr)) {
+                throw new InstagramException('Response code is ' . $response->code . ': ' . static::httpCodeToString($response->code) . '.' .
+                    'Something went wrong. Please report issue.', $response->code, static::getErrorBody($response->body));
+            }
+
+            $nodes = $arr['data']['xdt_api__v1__feed__user_timeline_graphql_connection']['edges'];
+            // fix - count takes longer/has more overhead
+            if (!isset($nodes) || empty($nodes)) {
+                return [];
+            }
+            foreach ($nodes as $mediaArray) {
+                if ($index === $count) {
+                    return $medias;
+                }
+                $medias[] = Media::create($mediaArray['node']);
+                $index++;
+            }
+            $maxId = $arr['data']['xdt_api__v1__feed__user_timeline_graphql_connection']['page_info']['end_cursor'];
+            $isMoreAvailable = $arr['data']['xdt_api__v1__feed__user_timeline_graphql_connection']['page_info']['has_next_page'];
+        }
+        return $medias;
     }
 
     /**

@@ -570,6 +570,10 @@ class Media extends AbstractModel
      */
     protected function initPropertiesCustom($value, $prop, $arr)
     {
+        if (null === $value) {
+            return;
+        }
+        
         switch ($prop) {
             case 'pk':
             case 'id':
@@ -828,6 +832,7 @@ class Media extends AbstractModel
                 foreach ($value as $media) {
                     switch ($media['type']) {
                         case 101:
+                        case 104:
                             $this->videoStandardResolutionUrl = $media['url'];
                             break;
                         case 102:
